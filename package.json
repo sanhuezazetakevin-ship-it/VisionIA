@@ -1,0 +1,32 @@
+{
+  "name": "vision-ai-realtime-edition",
+  "version": "2.0.0",
+  "description": "Plataforma Enterprise de Visión Computacional en Tiempo Real para Cocinas (HACCP) - SENATI",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "dev:backend": "python -m uvicorn app.main:app --app-dir services/core_engine --reload --port 8000",
+    "dev:all": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan,magenta\" \"npm run dev:backend\" \"npm run dev\"",
+    "test:backend": "python -m pytest",
+    "build": "npm --prefix apps/web run build",
+    "preview": "npm --prefix apps/web run preview"
+  },
+  "keywords": [
+    "haccp",
+    "computer-vision",
+    "yolov9",
+    "yolo-seg",
+    "bev",
+    "homography",
+    "canvas-60fps",
+    "senati"
+  ],
+  "author": "SENATI - Carrera de Ingeniería de Software con Inteligencia Artificial (4to Semestre)",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

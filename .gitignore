@@ -1,0 +1,45 @@
+# Node & Frontend dependencies & build outputs
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr/
+*.local
+
+# Python artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Testing & Linters
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment and local credentials
+.env
+.env.*
+!.env.example
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# Large weights binaries (preserves README.md / .gitkeep)
+weights/*.pt
+weights/*.onnx
+weights/*.bin
+weights/*.engine

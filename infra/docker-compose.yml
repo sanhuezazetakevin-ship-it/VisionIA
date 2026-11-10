@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vision_ai_postgres
+    environment:
+      POSTGRES_DB: vision_ai_haccp
+      POSTGRES_USER: senati_admin
+      POSTGRES_PASSWORD: enterprise_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  relay_controller:
+    image: alpine:latest
+    container_name: vision_ai_relays
+    command: ["echo", "24V Opto-isolated relay daemon online (Modbus RTU/TCP)"]
+
+volumes:
+  pgdata:
