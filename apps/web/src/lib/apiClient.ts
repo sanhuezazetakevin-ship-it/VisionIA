@@ -10,8 +10,17 @@ import type {
 } from './types';
 import { generateDedupKey, generateAuditChainHash } from './sha256';
 
-export const API_BASE_URL = 'http://localhost:8000/api/v1';
-export const WS_BASE_URL = 'ws://localhost:8000/ws/v1';
+const rawBackendUrl = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim().replace(/\/+$/, '');
+const derivedApiBase = rawBackendUrl ? `${rawBackendUrl}/api/v1` : 'http://localhost:8000/api/v1';
+const derivedWsBase = rawBackendUrl
+  ? `${rawBackendUrl.replace(/^http/i, 'ws')}/ws/v1`
+  : 'ws://localhost:8000/ws/v1';
+
+export const BACKEND_ORIGIN = rawBackendUrl || 'http://localhost:8000';
+export const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || derivedApiBase;
+export const WS_BASE_URL =
+  (import.meta.env.VITE_WS_BASE_URL as string | undefined)?.trim() || derivedWsBase;
 
 export const INITIAL_CAMERAS: Camera[] = [
   {
@@ -207,7 +216,7 @@ export async function checkBackendHealth(): Promise<{ online: boolean; details?:
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1500);
-    const res = await fetch('http://localhost:8000/health', { signal: controller.signal });
+    const res = await fetch(`${BACKEND_ORIGIN}/health`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();

@@ -25,10 +25,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configuración de CORS para el Frontend React
+# Configuración de CORS para el Frontend React (local y Vercel)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

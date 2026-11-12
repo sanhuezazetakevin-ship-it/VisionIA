@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Detection, Telemetry, SanitaryRule, Incident, ROIZone, BEVCalibration } from '../lib/types';
 import { projectPointBEV, solveHomographyMatrix } from '../lib/homographyMath';
+import { WS_BASE_URL } from '../lib/apiClient';
 import { generateDedupKey, generateAuditChainHash } from '../lib/sha256';
 import {
   SIMULATION_PERSPECTIVES,
@@ -99,6 +100,16 @@ export function useWebSocketLiveFeed({
 
   useEffect(() => {
     const target = SIMULATION_PERSPECTIVES[perspective];
+    if (isBackendConnected) {
+      transitionRef.current = {
+        from: target,
+        to: target,
+        current: target,
+        startTime: 0,
+      };
+      setScenePreset(target);
+      return;
+    }
     if (transitionRef.current.to.id !== target.id) {
       transitionRef.current = {
         from: transitionRef.current.current,
@@ -107,7 +118,7 @@ export function useWebSocketLiveFeed({
         startTime: performance.now(),
       };
     }
-  }, [perspective]);
+  }, [perspective, isBackendConnected]);
 
   const frameCountRef = useRef(0);
   const debounceTimersRef = useRef<{ [key: string]: { start: number; triggered: boolean } }>({});
@@ -145,7 +156,7 @@ export function useWebSocketLiveFeed({
 
     const connectWebSocket = () => {
       try {
-        socket = new WebSocket(`ws://localhost:8000/ws/v1/live-feed/${cameraId}`);
+        socket = new WebSocket(`${WS_BASE_URL}/live-feed/${cameraId}`);
         wsRef.current = socket;
 
         socket.onopen = () => {
