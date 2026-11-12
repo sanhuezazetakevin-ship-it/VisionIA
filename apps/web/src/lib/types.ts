@@ -85,6 +85,8 @@ export interface Incident {
   track_id: number;
   started_at: string;
   resolved_at: string | null;
+  corrective_note?: string;
+  resolved_by?: string;
   duration_sec: number;
   snapshot_key: string;
   anonymized_snapshot_data?: string;
@@ -92,6 +94,15 @@ export interface Incident {
   prev_hash: string;
   current_hash: string;
   haccp_verified: boolean;
+}
+
+export interface SanitizationLog {
+  id: string;
+  camera_id: string;
+  camera_name: string;
+  performed_at: string;
+  performed_by: string;
+  note: string;
 }
 
 export interface Telemetry {

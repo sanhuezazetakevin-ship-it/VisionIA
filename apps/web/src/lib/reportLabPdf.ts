@@ -1,11 +1,12 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { Incident, ReportConfig, Telemetry } from './types';
+import type { Incident, ReportConfig, Telemetry, SanitizationLog } from './types';
 
 export function generateReportLabHACCP(
   incidents: Incident[],
   config: ReportConfig,
-  telemetry: Telemetry
+  telemetry: Telemetry,
+  sanitizationLogs: SanitizationLog[] = []
 ): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -14,9 +15,9 @@ export function generateReportLabHACCP(
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
-  const primaryColor: [number, number, number] = [15, 23, 42];
-  const accentColor: [number, number, number] = [6, 182, 212];
-  const alertColor: [number, number, number] = [239, 68, 68];
+  const primaryColor: [number, number, number] = [19, 23, 32];
+  const accentColor: [number, number, number] = [59, 130, 246];
+  const alertColor: [number, number, number] = [220, 38, 38];
 
   doc.setFillColor(...primaryColor);
   doc.rect(0, 0, pageWidth, 28, 'F');
@@ -27,12 +28,12 @@ export function generateReportLabHACCP(
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('VISION AI REALTIME EDITION — INFORME EJECUTIVO HACCP', 14, 12);
+  doc.text('CONTROL SANITARIO HACCP — INFORME OPERATIVO', 14, 12);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(203, 213, 225);
-  doc.text('Auditoría Sanitaria Continua para Cocinas Industriales | SENATI 4to Semestre', 14, 18);
+  doc.text('Auditoría Sanitaria Continua para Áreas de Preparación de Alimentos', 14, 18);
   doc.text(`Generado: ${new Date().toLocaleString('es-PE')} | Destino SMTP: ${config.smtp_recipient}`, 14, 23);
 
   doc.setTextColor(51, 65, 85);
@@ -111,15 +112,15 @@ export function generateReportLabHACCP(
     inc.severity,
     inc.roi_name,
     `${inc.duration_sec.toFixed(0)} s`,
-    new Date(inc.started_at).toLocaleTimeString('es-PE'),
-    inc.dedup_hash.slice(0, 12) + '...',
+    inc.resolved_at ? 'Resuelta' : 'Pendiente',
+    inc.corrective_note || '—',
     inc.current_hash.slice(0, 12) + '...'
   ]);
 
   autoTable(doc, {
     startY: 110,
     margin: { left: 14, right: 14 },
-    head: [['ID', 'Regla', 'Severidad', 'Zona ROI', 'Duración', 'Hora', 'DedupKey SHA-256', 'Hash Bloque']],
+    head: [['ID', 'Regla', 'Severidad', 'Zona', 'Duración', 'Estado', 'Acción Correctiva', 'Hash Bloque']],
     body: tableData,
     theme: 'grid',
     headStyles: {
@@ -135,13 +136,13 @@ export function generateReportLabHACCP(
       textColor: [30, 41, 59],
     },
     columnStyles: {
-      0: { cellWidth: 24, fontStyle: 'bold' },
-      1: { cellWidth: 26 },
-      2: { cellWidth: 22, halign: 'center' },
-      3: { cellWidth: 35 },
-      4: { cellWidth: 15, halign: 'right' },
+      0: { cellWidth: 22, fontStyle: 'bold' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 19, halign: 'center' },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 13, halign: 'right' },
       5: { cellWidth: 16, halign: 'center' },
-      6: { cellWidth: 22, font: 'courier' },
+      6: { cellWidth: 40 },
       7: { cellWidth: 22, font: 'courier' },
     },
     didParseCell: (data) => {
@@ -157,15 +158,40 @@ export function generateReportLabHACCP(
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY || 200;
-  
+
+  if (sanitizationLogs.length > 0 && finalY < 235) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text('3. REGISTRO PREVENTIVO DE SANITIZACIÓN', 14, finalY + 9);
+
+    autoTable(doc, {
+      startY: finalY + 12,
+      margin: { left: 14, right: 14 },
+      head: [['ID', 'Estación', 'Hora', 'Responsable', 'Observación']],
+      body: sanitizationLogs.slice(0, 4).map(s => [
+        s.id,
+        s.camera_id,
+        new Date(s.performed_at).toLocaleTimeString('es-PE'),
+        s.performed_by,
+        s.note,
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontSize: 7 },
+      styles: { fontSize: 6.8, cellPadding: 1.5, textColor: [30, 41, 59] },
+    });
+  }
+
+  const certBaseY = ((doc as any).lastAutoTable?.finalY || finalY) + 9;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
-  doc.text('3. CERTIFICACIÓN DE INTEGRIDAD FORENSE HACCP', 14, finalY + 10);
+  doc.text('4. CERTIFICACIÓN DE INTEGRIDAD FORENSE HACCP', 14, certBaseY);
 
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
-  doc.rect(14, finalY + 13, pageWidth - 28, 24, 'FD');
+  doc.rect(14, certBaseY + 3, pageWidth - 28, 24, 'FD');
 
   doc.setFont('courier', 'normal');
   doc.setFontSize(6.5);
@@ -173,15 +199,15 @@ export function generateReportLabHACCP(
   const genesis = '000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f';
   const latestHash = incidents.length > 0 ? incidents[incidents.length - 1].current_hash : genesis;
 
-  doc.text(`GENESIS_HASH: ${genesis}`, 18, finalY + 19);
-  doc.text(`LATEST_AUDIT_HASH: ${latestHash}`, 18, finalY + 24);
-  doc.text(`FIRMA DIGITAL DEL SERVIDOR: SHA256-RSA-VERIFIED-SENATI-2026-ENTERPRISE-PIPELINE`, 18, finalY + 29);
-  doc.text(`DIAGNÓSTICO: Cadena inmutable validada sin bifurcaciones. 100% auditable bajo norma HACCP.`, 18, finalY + 34);
+  doc.text(`GENESIS_HASH: ${genesis}`, 18, certBaseY + 9);
+  doc.text(`LATEST_AUDIT_HASH: ${latestHash}`, 18, certBaseY + 14);
+  doc.text(`FIRMA DIGITAL DEL SERVIDOR: SHA256-VERIFIED-HACCP-2026`, 18, certBaseY + 19);
+  doc.text(`DIAGNÓSTICO: Cadena inmutable validada sin bifurcaciones. 100% auditable bajo norma HACCP.`, 18, certBaseY + 24);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
-  doc.text('Documento compilado automáticamente por el motor asíncrono ReportLab | VISION AI Realtime Edition SENATI', 14, 288);
+  doc.text('Documento compilado automáticamente | Sistema de Control Sanitario HACCP', 14, 288);
   doc.text('Página 1 de 1', pageWidth - 26, 288);
 
   return doc;

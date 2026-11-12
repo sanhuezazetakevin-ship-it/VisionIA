@@ -1,4 +1,13 @@
-import type { Camera, BEVCalibration, ROIZone, SanitaryRule, Incident, ReportConfig, Point2D } from './types';
+import type {
+  Camera,
+  BEVCalibration,
+  ROIZone,
+  SanitaryRule,
+  Incident,
+  ReportConfig,
+  Point2D,
+  SanitizationLog,
+} from './types';
 import { generateDedupKey, generateAuditChainHash } from './sha256';
 
 export const API_BASE_URL = 'http://localhost:8000/api/v1';
@@ -7,7 +16,7 @@ export const WS_BASE_URL = 'ws://localhost:8000/ws/v1';
 export const INITIAL_CAMERAS: Camera[] = [
   {
     id: 'CAM-01',
-    name: 'Mesa #1 (Cámara Activa)',
+    name: 'Mesa #1 — Estación Principal',
     stream_url: 'usb://dev/video0@1080p30',
     fps_target: 30,
     current_fps: 30.0,
@@ -18,8 +27,8 @@ export const INITIAL_CAMERAS: Camera[] = [
   },
   {
     id: 'CAM-02',
-    name: 'Línea de Envasado & Almacén Frío',
-    stream_url: 'rtsp://admin:pwd@192.168.1.120:554/h264',
+    name: 'Línea de Envasado y Almacén Frío',
+    stream_url: 'rtsp://192.168.1.120:554/h264',
     fps_target: 30,
     current_fps: 29.8,
     is_active: true,
@@ -29,8 +38,8 @@ export const INITIAL_CAMERAS: Camera[] = [
   },
   {
     id: 'CAM-03',
-    name: 'Estación Central de Lavado y Sinks',
-    stream_url: 'rtsp://admin:pwd@192.168.1.125:554/h264',
+    name: 'Estación Central de Lavado',
+    stream_url: 'rtsp://192.168.1.125:554/h264',
     fps_target: 30,
     current_fps: 30.0,
     is_active: true,
@@ -45,10 +54,10 @@ export const INITIAL_RULES: SanitaryRule[] = [
     id: 'rule-01',
     code: 'RULE-EPP-001',
     description: 'Operador en mesa sin cofia capilar',
-    condition: 'Operador activo en mesa sin cofia detectada',
+    condition: 'Presencia en estación de preparación sin cofia sanitaria',
     min_duration_sec: 3.0,
     severity: 'CRÍTICA',
-    action_target: 'Sirena 105 dB + Alerta Roja HUD + Relé 24V',
+    action_target: 'Sirena 105 dB + Alerta en visor + Relé 24V',
     relay_pin: 1,
     relay_active: true,
     sound_siren: true,
@@ -57,10 +66,10 @@ export const INITIAL_RULES: SanitaryRule[] = [
     id: 'rule-02',
     code: 'RULE-EPP-002',
     description: 'Manos sobre alimentos o tabla sin guantes de nitrilo',
-    condition: 'Interacción manual en superficie sin guantes sanitarios',
+    condition: 'Manipulación directa en superficie sin guantes sanitarios',
     min_duration_sec: 2.0,
     severity: 'ADVERTENCIA',
-    action_target: 'Recuadro Ámbar en Canvas + Registro BD',
+    action_target: 'Indicador ámbar + Registro en bitácora',
     relay_pin: 2,
     relay_active: false,
     sound_siren: false,
@@ -69,10 +78,10 @@ export const INITIAL_RULES: SanitaryRule[] = [
     id: 'rule-03',
     code: 'RULE-EPP-003',
     description: 'Operador en zona de trabajo sin mascarilla sanitaria',
-    condition: 'Rostro descubierto o mascarilla bajo la barbilla',
+    condition: 'Rostro descubierto o mascarilla mal colocada',
     min_duration_sec: 4.0,
     severity: 'ADVERTENCIA',
-    action_target: 'Aviso Supervisor + Registro BD',
+    action_target: 'Aviso supervisor + Registro en bitácora',
     relay_pin: 3,
     relay_active: false,
     sound_siren: false,
@@ -80,11 +89,11 @@ export const INITIAL_RULES: SanitaryRule[] = [
   {
     id: 'rule-04',
     code: 'RULE-HYG-001',
-    description: 'Mesa con residuos/manchas acumuladas sin limpiar',
-    condition: 'YOLO-Seg dirty_zone persiste en mesa > 5 min',
+    description: 'Mesa con residuos o manchas sin limpiar',
+    condition: 'Persistencia de suciedad en superficie mayor a 5 min',
     min_duration_sec: 300.0,
     severity: 'ADVERTENCIA',
-    action_target: 'Ticket Limpieza Automático + Bitácora HACCP',
+    action_target: 'Orden de limpieza + Bitácora HACCP',
     relay_pin: 4,
     relay_active: false,
     sound_siren: false,
@@ -92,11 +101,11 @@ export const INITIAL_RULES: SanitaryRule[] = [
   {
     id: 'rule-05',
     code: 'RULE-HYG-002',
-    description: 'Herramienta o cuchillo sucio abandonado sin lavar',
-    condition: 'YOLO dirty_tool estático fuera de lavadero > 2 min',
+    description: 'Herramienta o cuchillo sucio fuera de lavadero',
+    condition: 'Utensilio estático fuera de zona de lavado > 2 min',
     min_duration_sec: 120.0,
     severity: 'CRÍTICA',
-    action_target: 'Alerta Desinfección Inmediata + Relé Lavavajillas',
+    action_target: 'Alerta de desinfección + Relé lavavajillas',
     relay_pin: 1,
     relay_active: true,
     sound_siren: true,
@@ -171,10 +180,21 @@ export const INITIAL_ROIS: ROIZone[] = [
   }
 ];
 
+export const INITIAL_SANITIZATION_LOGS: SanitizationLog[] = [
+  {
+    id: 'SAN-001',
+    camera_id: 'CAM-01',
+    camera_name: 'Mesa #1 — Estación Principal',
+    performed_at: new Date(Date.now() - 85 * 60 * 1000).toISOString(),
+    performed_by: 'Supervisor de Turno',
+    note: 'Desinfección inicial de superficie y tabla de corte',
+  },
+];
+
 export const INITIAL_REPORT_CONFIG: ReportConfig = {
-  smtp_recipient: 'auditoria.haccp@senati-industrial.edu.pe',
-  shift_name: 'Turno Matutino - Cocina Planta 2',
-  plant_zone: 'Planta Industrial Lima Este',
+  smtp_recipient: 'auditoria.haccp@planta-industrial.com',
+  shift_name: 'Turno Matutino - Área de Preparación',
+  plant_zone: 'Planta Industrial Principal',
   auto_dispatch_on_3_critical: true,
   last_dispatched_at: null
 };
@@ -324,6 +344,8 @@ export async function createSeedIncidents(): Promise<Incident[]> {
       track_id: 104,
       started_at: incident1Started,
       resolved_at: '2026-11-08T18:14:38Z',
+      corrective_note: 'Operario colocó cofia sanitaria nueva',
+      resolved_by: 'Supervisor de Turno',
       duration_sec: 18.0,
       snapshot_key: 'snaps/20261108_181420_trk104_anon.jpg',
       dedup_hash: dedupKey1,
@@ -344,6 +366,8 @@ export async function createSeedIncidents(): Promise<Incident[]> {
       track_id: 108,
       started_at: incident2Started,
       resolved_at: '2026-11-08T18:46:02Z',
+      corrective_note: 'Se suministraron guantes de nitrilo en estación',
+      resolved_by: 'Supervisor de Turno',
       duration_sec: 52.0,
       snapshot_key: 'snaps/20261108_184510_trk108_anon.jpg',
       dedup_hash: dedupKey2,

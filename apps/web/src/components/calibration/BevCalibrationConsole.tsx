@@ -7,11 +7,13 @@ interface BevCalibrationConsoleProps {
   calibration: BEVCalibration;
   rois: ROIZone[];
   onSaveCalibration: (updated: BEVCalibration) => void;
+  canEditCalibration?: boolean;
 }
 
 export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
   calibration,
   onSaveCalibration,
+  canEditCalibration = true,
 }) => {
   const [quad, setQuad] = useState<[Point2D, Point2D, Point2D, Point2D]>(calibration.source_quad);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -27,7 +29,7 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
       { x: 0, y: 0 },
       { x: tableDimensions.length, y: 0 },
       { x: tableDimensions.length, y: tableDimensions.width },
-      { x: 0, y: tableDimensions.width }
+      { x: 0, y: tableDimensions.width },
     ];
 
     const H = solveHomographyMatrix(quad, dstQuad);
@@ -93,10 +95,10 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
     const w = canvas.width;
     const h = canvas.height;
 
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = '#0f131b';
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
     ctx.lineWidth = 1;
     for (let x = 0; x < w; x += 40) {
       ctx.beginPath();
@@ -118,30 +120,30 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
     ctx.lineTo(quad[3].x * w, quad[3].y * h);
     ctx.closePath();
 
-    ctx.fillStyle = 'rgba(6, 182, 212, 0.18)';
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.14)';
     ctx.fill();
-    ctx.strokeStyle = '#06b6d4';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#60a5fa';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    const pointLabels = ['P1: Noroeste (0,0)', 'P2: Noreste (L,0)', 'P3: Sureste (L,W)', 'P4: Suroeste (0,W)'];
+    const pointLabels = ['P1 (0, 0)', 'P2 (L, 0)', 'P3 (L, W)', 'P4 (0, W)'];
     quad.forEach((pt, idx) => {
       const px = pt.x * w;
       const py = pt.y * h;
       const isSelected = selectedPointIndex === idx;
 
       ctx.beginPath();
-      ctx.arc(px, py, isSelected ? 12 : 9, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#38bdf8' : '#06b6d4';
+      ctx.arc(px, py, isSelected ? 10 : 8, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? '#93c5fd' : '#3b82f6';
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = '#f8fafc';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-      ctx.fillRect(px + 12, py - 12, 130, 20);
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = 'rgba(15, 19, 28, 0.9)';
+      ctx.fillRect(px + 12, py - 11, 74, 18);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '600 10px JetBrains Mono, monospace';
       ctx.fillText(pointLabels[idx], px + 16, py + 2);
     });
 
@@ -155,12 +157,11 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
-    ctx.fillRect(probeX + 10, probeY - 14, 110, 18);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText('PUNTO DE PRUEBA', probeX + 14, probeY - 2);
-
+    ctx.fillStyle = 'rgba(153, 27, 27, 0.9)';
+    ctx.fillRect(probeX + 10, probeY - 12, 84, 18);
+    ctx.fillStyle = '#fef2f2';
+    ctx.font = '600 9px Inter, sans-serif';
+    ctx.fillText('Punto de prueba', probeX + 14, probeY);
   }, [quad, selectedPointIndex, probePoint]);
 
   useEffect(() => {
@@ -172,7 +173,7 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
     const w = canvas.width;
     const h = canvas.height;
 
-    ctx.fillStyle = '#070c16';
+    ctx.fillStyle = '#0f131b';
     ctx.fillRect(0, 0, w, h);
 
     const margin = 40;
@@ -183,7 +184,7 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
     const originX = margin + 20;
     const originY = margin + 20;
 
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
     ctx.lineWidth = 1;
     for (let mx = 0; mx <= 3.0; mx += 0.5) {
       const gx = originX + mx * scalePxPerM;
@@ -193,8 +194,8 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
       ctx.stroke();
 
       ctx.fillStyle = '#64748b';
-      ctx.font = '9px monospace';
-      ctx.fillText(`${mx.toFixed(1)}m`, gx - 10, h - margin + 14);
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.fillText(`${mx.toFixed(1)}m`, gx - 10, h - margin + 15);
     }
 
     for (let my = 0; my <= 2.0; my += 0.5) {
@@ -205,27 +206,26 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
       ctx.stroke();
 
       ctx.fillStyle = '#64748b';
-      ctx.font = '9px monospace';
-      ctx.fillText(`${my.toFixed(1)}m`, margin - 32, gy + 3);
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.fillText(`${my.toFixed(1)}m`, margin - 34, gy + 3);
     }
 
     const tablePxW = tableDimensions.length * scalePxPerM;
     const tablePxH = tableDimensions.width * scalePxPerM;
 
-    ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.16)';
     ctx.fillRect(originX, originY, tablePxW, tablePxH);
-    ctx.strokeStyle = '#06b6d4';
+    ctx.strokeStyle = '#60a5fa';
     ctx.lineWidth = 2;
     ctx.strokeRect(originX, originY, tablePxW, tablePxH);
 
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(`MESA: ${tableDimensions.length.toFixed(2)}m x ${tableDimensions.width.toFixed(2)}m`, originX + 10, originY + 20);
-
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(originX - 10, originY - 10, tablePxW + 20, tablePxH + 20);
-    ctx.setLineDash([]);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '600 10px JetBrains Mono, monospace';
+    ctx.fillText(
+      `Mesa: ${tableDimensions.length.toFixed(2)}m x ${tableDimensions.width.toFixed(2)}m`,
+      originX + 10,
+      originY + 20
+    );
 
     if (projectedProbe) {
       const projX = originX + projectedProbe.x * scalePxPerM;
@@ -242,19 +242,19 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
       ctx.setLineDash([]);
 
       ctx.beginPath();
-      ctx.arc(projX, projY, 7, 0, Math.PI * 2);
+      ctx.arc(projX, projY, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#ef4444';
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      const label = `BEV: X=${projectedProbe.x.toFixed(2)}m, Y=${projectedProbe.y.toFixed(2)}m`;
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-      ctx.fillRect(projX + 12, projY - 10, 160, 20);
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(label, projX + 16, projY + 4);
+      const label = `X=${projectedProbe.x.toFixed(2)}m, Y=${projectedProbe.y.toFixed(2)}m`;
+      ctx.fillStyle = 'rgba(15, 19, 28, 0.95)';
+      ctx.fillRect(projX + 10, projY - 10, 140, 20);
+      ctx.fillStyle = '#93c5fd';
+      ctx.font = '600 10px JetBrains Mono, monospace';
+      ctx.fillText(label, projX + 14, projY + 4);
     }
   }, [tableDimensions, projectedProbe]);
 
@@ -265,7 +265,7 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
       homography_matrix: currentH,
       residual_error_cm: residualCm,
       table_dimensions_m: tableDimensions,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
     onSaveCalibration(updated);
     setIsSavedNotice(true);
@@ -277,31 +277,38 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-5 p-5 bg-[#0b121e] border border-slate-800 rounded-xl">
-      <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800">
+    <div className="flex flex-col gap-5 p-5 bg-[#171c26] border border-[#262d3b] rounded-lg">
+      <div className="flex flex-wrap items-center justify-between pb-4 border-b border-[#262d3b] gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <Crosshair className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-base font-bold text-slate-100 font-mono tracking-wide">
-              M03. CONSOLA DE CALIBRACIÓN ESPACIAL (BIRD'S EYE VIEW - BEV)
+            <Crosshair className="w-4 h-4 text-blue-400" />
+            <h2 className="text-base font-semibold text-slate-100">
+              Calibración Espacial (Proyección Cenital)
             </h2>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Transformación homográfica cenital 3x3 para corrección angular y medición métrica real (&lt; 2.5m).
+            Ajuste homográfico de 4 puntos para mapeo métrico real de la superficie de trabajo.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono font-bold ${
-            residualCm < 5.0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'
-          }`}>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border ${
+              residualCm < 5.0
+                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                : 'bg-red-950/40 text-red-300 border-red-800/60'
+            }`}
+          >
             <ShieldCheck className="w-4 h-4" />
-            <span>Error Residual: {residualCm} cm (Criterio Sec. 15: &lt; 5.0 cm)</span>
+            <span>
+              Error residual: <span className="font-mono tabular-nums">{residualCm} cm</span>
+            </span>
           </div>
 
           <button
             onClick={handleReset}
-            className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition"
+            disabled={!canEditCalibration}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-[#1e2430] text-slate-300 border border-[#2d3646] hover:bg-[#252c3b] transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Restablecer</span>
@@ -309,32 +316,39 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
 
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg transition"
+            disabled={!canEditCalibration}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs font-semibold bg-[#2563eb] hover:bg-[#1d4ed8] text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save className="w-3.5 h-3.5" />
-            <span>Guardar Matriz Homográfica</span>
+            <span>Guardar calibración</span>
           </button>
         </div>
       </div>
 
+      {!canEditCalibration && (
+        <div className="px-3.5 py-2.5 rounded-md bg-[#131720] border border-[#262d3b] text-xs text-slate-400">
+          Vista en modo consulta. Solo el Administrador puede guardar cambios en la calibración espacial.
+        </div>
+      )}
+
       {isSavedNotice && (
-        <div className="p-3 bg-emerald-950/60 border border-emerald-500/50 rounded-lg flex items-center gap-2 text-emerald-300 text-xs font-mono animate-fade-in">
+        <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-md flex items-center gap-2 text-emerald-300 text-xs">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>Matriz de homografía 3x3 persistida exitosamente vía POST /api/v1/cameras/CAM-01/calibrate-bev.</span>
+          <span>Matriz de transformación espacial guardada correctamente.</span>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="flex flex-col bg-slate-900/60 border border-slate-800 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
-              <Move className="w-3.5 h-3.5 text-cyan-400" />
-              1. PERSPECTIVA DE CÁMARA (ARRASTRAR 4 PUNTOS P1..P4)
+        <div className="flex flex-col bg-[#131720] border border-[#232936] rounded-lg p-3.5">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+              <Move className="w-3.5 h-3.5 text-blue-400" />
+              Perspectiva de cámara (arrastrar P1..P4)
             </span>
-            <span className="text-[11px] text-slate-500 font-mono">Haz clic para mover punto de prueba</span>
+            <span className="text-[11px] text-slate-400">Clic para mover punto de prueba</span>
           </div>
 
-          <div className="relative aspect-[16/9] bg-black rounded overflow-hidden border border-slate-800">
+          <div className="relative aspect-[16/9] bg-[#0b0e14] rounded overflow-hidden border border-[#232936]">
             <canvas
               ref={leftCanvasRef}
               width={640}
@@ -346,42 +360,37 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-3 text-[11px] font-mono">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-[11px] font-mono tabular-nums">
             {quad.map((pt, i) => (
-              <div key={i} className="p-1.5 bg-slate-950 rounded border border-slate-800 text-slate-400">
-                <span className="text-cyan-400 font-bold">P{i+1}: </span>
-                X: {(pt.x * 100).toFixed(1)}%, Y: {(pt.y * 100).toFixed(1)}%
+              <div key={i} className="p-2 bg-[#0f131b] rounded border border-[#232936] text-slate-400">
+                <span className="text-blue-400 font-semibold">P{i + 1}: </span>
+                {(pt.x * 100).toFixed(0)}%, {(pt.y * 100).toFixed(0)}%
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex flex-col bg-slate-900/60 border border-slate-800 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
-              <Grid className="w-3.5 h-3.5 text-cyan-400" />
-              2. PROYECCIÓN CENITAL MÉTRICA REAL (BIRD'S EYE VIEW)
+        <div className="flex flex-col bg-[#131720] border border-[#232936] rounded-lg p-3.5">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+              <Grid className="w-3.5 h-3.5 text-blue-400" />
+              Proyección cenital en metros
             </span>
-            <span className="text-[11px] text-emerald-400 font-mono">Escala 1:1 en Metros</span>
+            <span className="text-[11px] text-slate-400">Escala real 1:1</span>
           </div>
 
-          <div className="relative aspect-[16/9] bg-black rounded overflow-hidden border border-slate-800">
-            <canvas
-              ref={rightCanvasRef}
-              width={640}
-              height={360}
-              className="w-full h-full"
-            />
+          <div className="relative aspect-[16/9] bg-[#0b0e14] rounded overflow-hidden border border-[#232936]">
+            <canvas ref={rightCanvasRef} width={640} height={360} className="w-full h-full" />
           </div>
 
-          <div className="mt-3 p-2 bg-slate-950 rounded border border-slate-800 text-xs font-mono">
-            <div className="text-[11px] text-slate-400 mb-1 flex items-center justify-between">
-              <span className="font-bold text-cyan-400">MATRIZ HOMOGRÁFICA H (3x3):</span>
-              <span className="text-slate-500">DLT Gaussian 8x8 Solver</span>
+          <div className="mt-3 p-2.5 bg-[#0f131b] rounded border border-[#232936] text-xs">
+            <div className="text-[11px] text-slate-400 mb-1.5 flex items-center justify-between">
+              <span className="font-semibold text-slate-300">Matriz Homográfica (3x3)</span>
+              <span className="text-slate-500 font-mono">DLT 8x8</span>
             </div>
-            <div className="grid grid-cols-3 gap-1 text-center text-slate-300 bg-slate-900/70 p-1.5 rounded">
+            <div className="grid grid-cols-3 gap-1.5 text-center font-mono tabular-nums">
               {currentH.flat().map((val, idx) => (
-                <div key={idx} className="bg-slate-800/60 py-0.5 rounded text-[11px] text-cyan-200">
+                <div key={idx} className="bg-[#171c26] py-1 rounded text-[11px] text-slate-300 border border-[#232936]">
                   {val.toFixed(4)}
                 </div>
               ))}
@@ -390,14 +399,14 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
         </div>
       </div>
 
-      <div className="p-3 bg-slate-900/40 border border-slate-800 rounded-lg flex flex-wrap items-center justify-between gap-4 text-xs">
-        <div className="flex items-center gap-2 text-slate-300 font-mono">
-          <Ruler className="w-4 h-4 text-cyan-400" />
-          <span>Dimensiones de la Mesa:</span>
+      <div className="p-3.5 bg-[#131720] border border-[#232936] rounded-lg flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div className="flex items-center gap-2 text-slate-300 font-medium">
+          <Ruler className="w-4 h-4 text-blue-400" />
+          <span>Dimensiones físicas de la mesa</span>
         </div>
 
-        <div className="flex items-center gap-4 font-mono">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <label className="text-slate-400">Largo (m):</label>
             <input
               type="number"
@@ -405,12 +414,14 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
               min="0.5"
               max="5.0"
               value={tableDimensions.length}
-              onChange={e => setTableDimensions({ ...tableDimensions, length: parseFloat(e.target.value) || 2.4 })}
-              className="w-16 px-2 py-1 bg-slate-950 border border-slate-700 rounded text-cyan-300 text-center font-bold focus:border-cyan-500 focus:outline-none"
+              onChange={e =>
+                setTableDimensions({ ...tableDimensions, length: parseFloat(e.target.value) || 2.4 })
+              }
+              className="w-20 px-2 py-1 bg-[#0f131b] border border-[#2d3646] rounded text-slate-100 text-center font-mono tabular-nums focus:border-blue-500 focus:outline-none"
             />
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <label className="text-slate-400">Ancho (m):</label>
             <input
               type="number"
@@ -418,8 +429,10 @@ export const BevCalibrationConsole: React.FC<BevCalibrationConsoleProps> = ({
               min="0.5"
               max="3.0"
               value={tableDimensions.width}
-              onChange={e => setTableDimensions({ ...tableDimensions, width: parseFloat(e.target.value) || 1.2 })}
-              className="w-16 px-2 py-1 bg-slate-950 border border-slate-700 rounded text-cyan-300 text-center font-bold focus:border-cyan-500 focus:outline-none"
+              onChange={e =>
+                setTableDimensions({ ...tableDimensions, width: parseFloat(e.target.value) || 1.2 })
+              }
+              className="w-20 px-2 py-1 bg-[#0f131b] border border-[#2d3646] rounded text-slate-100 text-center font-mono tabular-nums focus:border-blue-500 focus:outline-none"
             />
           </div>
         </div>

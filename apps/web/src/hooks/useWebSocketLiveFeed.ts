@@ -1,42 +1,59 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Detection, Telemetry, SanitaryRule, Incident, ROIZone, BEVCalibration } from '../lib/types';
-import { projectPointBEV } from '../lib/homographyMath';
+import { projectPointBEV, solveHomographyMatrix } from '../lib/homographyMath';
 import { generateDedupKey, generateAuditChainHash } from '../lib/sha256';
+import {
+  SIMULATION_PERSPECTIVES,
+  interpolatePerspectivePreset,
+  type PerspectivePreset,
+  type SimulationPerspective,
+} from '../lib/simulationPerspectives';
 
 interface UseWebSocketLiveFeedProps {
   cameraId: string;
   rules: SanitaryRule[];
   rois: ROIZone[];
   calibration: BEVCalibration;
+  perspective: SimulationPerspective;
+  alertsPaused?: boolean;
   onNewIncident: (incident: Incident) => void;
   onSoundAlert: (type: 'CRITICAL' | 'WARNING') => void;
 }
+
+const PERSPECTIVE_TRANSITION_MS = 520;
 
 export function useWebSocketLiveFeed({
   cameraId,
   rules,
   calibration,
+  perspective,
+  alertsPaused = false,
   onNewIncident,
-  onSoundAlert
+  onSoundAlert,
 }: UseWebSocketLiveFeedProps) {
   const [detections, setDetections] = useState<Detection[]>([]);
+  const [scenePreset, setScenePreset] = useState<PerspectivePreset>(
+    () => SIMULATION_PERSPECTIVES[perspective]
+  );
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
-  const [activeViolations, setActiveViolations] = useState<{
-    ruleCode: string;
-    elapsedSec: number;
-    targetSec: number;
-    severity: 'CRÍTICA' | 'ADVERTENCIA';
-    trackId: number;
-    isTriggered: boolean;
-  }[]>([]);
-  
+  const [activeViolations, setActiveViolations] = useState<
+    {
+      ruleCode: string;
+      elapsedSec: number;
+      targetSec: number;
+      severity: 'CRÍTICA' | 'ADVERTENCIA';
+      trackId: number;
+      isTriggered: boolean;
+    }[]
+  >([]);
+
   const [telemetry, setTelemetry] = useState<Telemetry>({
     fps: 60.0,
     latency_ms: 21.4,
     ingest_ms: 12.1,
     inference_ms: 19.3,
     bev_ms: 3.2,
-    queue_size: 1, // 'Latest Frame Wins'
+    queue_size: 1,
     ram_buffer_mb: 28.4,
     dropped_frames: 0,
     relay_24v_active: false,
@@ -46,7 +63,6 @@ export function useWebSocketLiveFeed({
   const [useLocalWebcam, setUseLocalWebcam] = useState(false);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
 
-  // Modos de simulación forzada manual (útil para sustentación)
   const [forcedInfractions, setForcedInfractions] = useState<{
     withoutHairnet: boolean;
     withoutGloves: boolean;
@@ -68,6 +84,30 @@ export function useWebSocketLiveFeed({
       return prev;
     });
   }, []);
+
+  const transitionRef = useRef<{
+    from: PerspectivePreset;
+    to: PerspectivePreset;
+    current: PerspectivePreset;
+    startTime: number;
+  }>({
+    from: SIMULATION_PERSPECTIVES[perspective],
+    to: SIMULATION_PERSPECTIVES[perspective],
+    current: SIMULATION_PERSPECTIVES[perspective],
+    startTime: 0,
+  });
+
+  useEffect(() => {
+    const target = SIMULATION_PERSPECTIVES[perspective];
+    if (transitionRef.current.to.id !== target.id) {
+      transitionRef.current = {
+        from: transitionRef.current.current,
+        to: target,
+        current: transitionRef.current.current,
+        startTime: performance.now(),
+      };
+    }
+  }, [perspective]);
 
   const frameCountRef = useRef(0);
   const debounceTimersRef = useRef<{ [key: string]: { start: number; triggered: boolean } }>({});
@@ -97,11 +137,11 @@ export function useWebSocketLiveFeed({
     setUseLocalWebcam(false);
   }, [webcamStream]);
 
-  // Conexión WebSocket Real al Backend FastAPI (ws://localhost:8000/ws/v1/live-feed/{camera_id})
+  // Conexión WebSocket al backend FastAPI si está disponible
   useEffect(() => {
     let isMounted = true;
     let socket: WebSocket | null = null;
-    let reconnectTimeout: any = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const connectWebSocket = () => {
       try {
@@ -109,56 +149,40 @@ export function useWebSocketLiveFeed({
         wsRef.current = socket;
 
         socket.onopen = () => {
-          if (isMounted) {
-            setIsBackendConnected(true);
-            console.log(`[WS] Conectado en vivo al backend FastAPI (Cámara: ${cameraId})`);
-          }
+          if (isMounted) setIsBackendConnected(true);
         };
 
-        socket.onmessage = (event) => {
+        socket.onmessage = event => {
           if (!isMounted) return;
           try {
             const data = JSON.parse(event.data);
             if (data.type === 'FRAME_TELEMETRY') {
-              if (data.telemetry) {
-                setTelemetry(data.telemetry);
-              }
-              if (data.detections) {
-                setDetections(data.detections);
-              }
-              if (data.active_violations) {
-                setActiveViolations(data.active_violations);
-              }
+              if (data.telemetry) setTelemetry(data.telemetry);
+              if (data.detections) setDetections(data.detections);
+              if (data.active_violations) setActiveViolations(data.active_violations);
               if (data.new_incidents && data.new_incidents.length > 0) {
                 data.new_incidents.forEach((inc: Incident) => {
                   onNewIncident(inc);
-                  if (inc.severity === 'CRÍTICA') {
-                    onSoundAlert('CRITICAL');
-                  } else {
-                    onSoundAlert('WARNING');
-                  }
+                  onSoundAlert(inc.severity === 'CRÍTICA' ? 'CRITICAL' : 'WARNING');
                 });
               }
             }
-          } catch (err) {
-            // Error parseando paquete
+          } catch {
+            // Ignorar paquete malformado
           }
         };
 
         socket.onerror = () => {
-          if (isMounted) {
-            setIsBackendConnected(false);
-          }
+          if (isMounted) setIsBackendConnected(false);
         };
 
         socket.onclose = () => {
           if (isMounted) {
             setIsBackendConnected(false);
-            // Intentar reconectar en 3 segundos
             reconnectTimeout = setTimeout(connectWebSocket, 3000);
           }
         };
-      } catch (err) {
+      } catch {
         if (isMounted) {
           setIsBackendConnected(false);
           reconnectTimeout = setTimeout(connectWebSocket, 3000);
@@ -175,12 +199,9 @@ export function useWebSocketLiveFeed({
     };
   }, [cameraId, onNewIncident, onSoundAlert]);
 
-  // Bucle de Simulación Reactiva en caso de Backend Offline o modo local
+  // Bucle de simulación en modo local con transición suave entre perspectivas
   useEffect(() => {
-    // Si el backend FastAPI está conectado y transmitiendo, pausar el simulador local para evitar solapamiento
-    if (isBackendConnected) {
-      return;
-    }
+    if (isBackendConnected) return;
 
     let animationFrameId: number;
     let lastSecond = performance.now();
@@ -193,7 +214,7 @@ export function useWebSocketLiveFeed({
         framesThisSecond = 0;
         lastSecond = time;
 
-        const jitter = (Math.random() - 0.5) * 4;
+        const jitter = (Math.random() - 0.5) * 3;
         const baseLatency = 20 + jitter;
 
         setTelemetry(prev => ({
@@ -201,100 +222,140 @@ export function useWebSocketLiveFeed({
           fps: Math.round(actualFps * 10) / 10,
           latency_ms: Math.max(16, Math.round(baseLatency * 10) / 10),
           ingest_ms: Math.round((11 + Math.random() * 2) * 10) / 10,
-          inference_ms: Math.round((18 + Math.random() * 4) * 10) / 10,
+          inference_ms: Math.round((18 + Math.random() * 3) * 10) / 10,
           bev_ms: Math.round((3 + Math.random()) * 10) / 10,
           queue_size: 1,
         }));
       }
 
+      // Calcular interpolación de perspectiva para este frame
+      const tr = transitionRef.current;
+      const elapsed = tr.startTime > 0 ? time - tr.startTime : PERSPECTIVE_TRANSITION_MS;
+      const progress = Math.min(1, elapsed / PERSPECTIVE_TRANSITION_MS);
+      const activePreset =
+        progress >= 1
+          ? tr.to
+          : interpolatePerspectivePreset(tr.from, tr.to, progress);
+      tr.current = activePreset;
+      setScenePreset(activePreset);
+
+      const { length, width } = calibration.table_dimensions_m;
+      const H =
+        progress >= 1 && activePreset.id === 'frontal'
+          ? calibration.homography_matrix
+          : solveHomographyMatrix(activePreset.tableQuad, [
+              { x: 0, y: 0 },
+              { x: length, y: 0 },
+              { x: length, y: width },
+              { x: 0, y: width },
+            ]);
+
       frameCountRef.current++;
       const t = frameCountRef.current / 60;
 
-      const op1X = 0.38 + Math.sin(t * 0.4) * 0.05;
-      const op1Y = 0.28 + Math.cos(t * 0.3) * 0.02;
+      const swayX = Math.sin(t * 0.45) * 0.035;
+      const swayY = Math.cos(t * 0.35) * 0.012;
 
-      // Determinar infracciones activas (automáticas o forzadas manualmente)
+      const base = activePreset.operatorBase;
+      const opX = base.x + swayX;
+      const opY = base.y + swayY;
+
       const cycleTime = t % 18;
       const isWithoutHairnet = forcedInfractions.withoutHairnet || (cycleTime > 5 && cycleTime < 13);
       const isWithoutGloves = forcedInfractions.withoutGloves || (cycleTime > 8 && cycleTime < 16);
       const isWithoutMask = forcedInfractions.withoutMask;
       const hasDirtyZone = forcedInfractions.hasDirtyZone;
 
-      const op1Ground = { x: op1X + 0.12, y: op1Y + 0.55 };
-      const op1Bev = projectPointBEV(calibration.homography_matrix, op1Ground);
+      const opGround = {
+        x: opX + base.groundOffset.x,
+        y: opY + base.groundOffset.y,
+      };
+      const opBev = projectPointBEV(H, opGround);
 
       const currentDetections: Detection[] = [
         {
           id: 'det-op-101',
           track_id: 101,
           class_name: 'operator',
-          label_es: 'Operario de Cocina (Anonimizado)',
+          label_es: 'Operario',
           confidence: 0.94,
-          bbox: [op1X, op1Y, 0.24, 0.58],
-          ground_point: op1Ground,
-          bev_point: op1Bev,
-          face_box: [op1X + 0.06, op1Y + 0.04, 0.12, 0.14],
+          bbox: [opX, opY, base.w, base.h],
+          ground_point: opGround,
+          bev_point: opBev,
+          face_box: [
+            opX + base.faceOffset[0],
+            opY + base.faceOffset[1],
+            base.faceOffset[2],
+            base.faceOffset[3],
+          ],
           is_violation: isWithoutHairnet || isWithoutGloves || isWithoutMask,
-          violation_code: isWithoutHairnet ? 'RULE-EPP-001' : (isWithoutGloves ? 'RULE-EPP-002' : (isWithoutMask ? 'RULE-EPP-003' : undefined)),
+          violation_code: isWithoutHairnet
+            ? 'RULE-EPP-001'
+            : isWithoutGloves
+              ? 'RULE-EPP-002'
+              : isWithoutMask
+                ? 'RULE-EPP-003'
+                : undefined,
         },
         {
           id: 'det-apron-101',
           track_id: 101,
           class_name: 'apron',
-          label_es: 'Mandil Sanitario',
+          label_es: 'Mandil sanitario',
           confidence: 0.91,
-          bbox: [op1X + 0.04, op1Y + 0.22, 0.16, 0.32],
-          ground_point: op1Ground,
+          bbox: [
+            opX + base.apronOffset[0],
+            opY + base.apronOffset[1],
+            base.apronOffset[2],
+            base.apronOffset[3],
+          ],
+          ground_point: opGround,
           is_violation: false,
         },
         {
           id: 'det-tool-01',
           track_id: 301,
           class_name: 'dirty_tool',
-          label_es: 'Cuchillo Chef en Superficie',
+          label_es: 'Utensilio de corte',
           confidence: 0.88,
-          bbox: [0.32, 0.68, 0.10, 0.05],
-          ground_point: { x: 0.37, y: 0.70 },
-          bev_point: projectPointBEV(calibration.homography_matrix, { x: 0.37, y: 0.70 }),
-          is_violation: false
-        }
+          bbox: activePreset.knifeBox,
+          ground_point: activePreset.knifePoint,
+          bev_point: projectPointBEV(H, activePreset.knifePoint),
+          is_violation: false,
+        },
       ];
 
-      // Mascarilla (si no está en falta)
       if (!isWithoutMask) {
         currentDetections.push({
           id: 'det-mask-101',
           track_id: 101,
           class_name: 'mask',
-          label_es: 'Mascarilla KN95',
+          label_es: 'Mascarilla',
           confidence: 0.89,
-          bbox: [op1X + 0.08, op1Y + 0.10, 0.08, 0.06],
-          ground_point: op1Ground,
+          bbox: [
+            opX + base.maskOffset[0],
+            opY + base.maskOffset[1],
+            base.maskOffset[2],
+            base.maskOffset[3],
+          ],
+          ground_point: opGround,
           is_violation: false,
         });
       }
 
-      // Manchas en mesa
       if (hasDirtyZone) {
         currentDetections.push({
           id: 'det-dirty-zone-01',
           track_id: 201,
           class_name: 'dirty_zone',
-          label_es: 'Derrame Graso / Residuos en Mesa',
+          label_es: 'Residuo en superficie',
           confidence: 0.86,
-          bbox: [0.55, 0.62, 0.16, 0.12],
-          mask_polygon: [
-            { x: 0.55, y: 0.64 },
-            { x: 0.62, y: 0.62 },
-            { x: 0.70, y: 0.66 },
-            { x: 0.71, y: 0.73 },
-            { x: 0.64, y: 0.74 },
-            { x: 0.56, y: 0.70 }
-          ],
-          ground_point: { x: 0.63, y: 0.68 },
-          bev_point: projectPointBEV(calibration.homography_matrix, { x: 0.63, y: 0.68 }),
+          bbox: activePreset.dirtyZoneBox,
+          mask_polygon: activePreset.dirtyZonePolygon,
+          ground_point: activePreset.dirtyZonePoint,
+          bev_point: projectPointBEV(H, activePreset.dirtyZonePoint),
           is_violation: true,
-          violation_code: 'RULE-HYG-001'
+          violation_code: 'RULE-HYG-001',
         });
       }
 
@@ -303,10 +364,15 @@ export function useWebSocketLiveFeed({
           id: 'det-hairnet-101',
           track_id: 101,
           class_name: 'hairnet',
-          label_es: 'Cofia Sanitaria Aprobada',
+          label_es: 'Cofia sanitaria',
           confidence: 0.96,
-          bbox: [op1X + 0.06, op1Y + 0.01, 0.12, 0.07],
-          ground_point: op1Ground,
+          bbox: [
+            opX + base.hairnetOffset[0],
+            opY + base.hairnetOffset[1],
+            base.hairnetOffset[2],
+            base.hairnetOffset[3],
+          ],
+          ground_point: opGround,
           is_violation: false,
         });
       }
@@ -316,10 +382,15 @@ export function useWebSocketLiveFeed({
           id: 'det-gloves-101',
           track_id: 101,
           class_name: 'gloves',
-          label_es: 'Guantes de Nitrilo',
+          label_es: 'Guantes de nitrilo',
           confidence: 0.92,
-          bbox: [op1X + 0.08, op1Y + 0.45, 0.12, 0.08],
-          ground_point: op1Ground,
+          bbox: [
+            opX + base.glovesOffset[0],
+            opY + base.glovesOffset[1],
+            base.glovesOffset[2],
+            base.glovesOffset[3],
+          ],
+          ground_point: opGround,
           is_violation: false,
         });
       }
@@ -339,8 +410,8 @@ export function useWebSocketLiveFeed({
       let hasCriticalAlarm = false;
 
       const ruleEpp001 = rules.find(r => r.code === 'RULE-EPP-001');
-      if (ruleEpp001) {
-        const timerKey = `RULE-EPP-001:101`;
+      if (ruleEpp001 && !alertsPaused) {
+        const timerKey = 'RULE-EPP-001:101';
         if (isWithoutHairnet) {
           if (!debounceTimersRef.current[timerKey]) {
             debounceTimersRef.current[timerKey] = { start: nowMs, triggered: false };
@@ -354,7 +425,7 @@ export function useWebSocketLiveFeed({
             targetSec: ruleEpp001.min_duration_sec,
             severity: 'CRÍTICA',
             trackId: 101,
-            isTriggered
+            isTriggered,
           });
 
           if (isTriggered) {
@@ -373,7 +444,7 @@ export function useWebSocketLiveFeed({
                     cameraId,
                     trackId: 101,
                     timestamp: incidentTime,
-                    severity: 'CRÍTICA'
+                    severity: 'CRÍTICA',
                   });
                   lastChainHashRef.current = chainHash;
 
@@ -385,13 +456,13 @@ export function useWebSocketLiveFeed({
                     rule_code: 'RULE-EPP-001',
                     rule_description: ruleEpp001.description,
                     roi_id: 'roi-prep-table',
-                    roi_name: 'Mesa de Cocina',
+                    roi_name: 'Mesa de Preparación',
                     severity: 'CRÍTICA',
                     track_id: 101,
                     started_at: incidentTime,
                     resolved_at: null,
                     duration_sec: 3.5,
-                    snapshot_key: `snaps/${Date.now()}_trk101_anon.jpg`,
+                    snapshot_key: `snaps/${Date.now()}_trk101.jpg`,
                     dedup_hash: dedupKey,
                     prev_hash: lastChainHashRef.current,
                     current_hash: chainHash,
@@ -408,8 +479,8 @@ export function useWebSocketLiveFeed({
       }
 
       const ruleEpp002 = rules.find(r => r.code === 'RULE-EPP-002');
-      if (ruleEpp002) {
-        const timerKey = `RULE-EPP-002:101`;
+      if (ruleEpp002 && !alertsPaused) {
+        const timerKey = 'RULE-EPP-002:101';
         if (isWithoutGloves) {
           if (!debounceTimersRef.current[timerKey]) {
             debounceTimersRef.current[timerKey] = { start: nowMs, triggered: false };
@@ -423,7 +494,7 @@ export function useWebSocketLiveFeed({
             targetSec: ruleEpp002.min_duration_sec,
             severity: 'ADVERTENCIA',
             trackId: 101,
-            isTriggered
+            isTriggered,
           });
 
           if (isTriggered && !debounceTimersRef.current[timerKey].triggered) {
@@ -435,12 +506,16 @@ export function useWebSocketLiveFeed({
         }
       }
 
+      if (alertsPaused) {
+        debounceTimersRef.current = {};
+      }
+
       setActiveViolations(currentActiveViolations);
 
       setTelemetry(prev => ({
         ...prev,
         relay_24v_active: hasCriticalAlarm,
-        siren_105db_active: hasCriticalAlarm
+        siren_105db_active: hasCriticalAlarm,
       }));
 
       animationFrameId = requestAnimationFrame(pipelineLoop);
@@ -451,10 +526,21 @@ export function useWebSocketLiveFeed({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [cameraId, rules, calibration, onNewIncident, onSoundAlert, isBackendConnected, forcedInfractions]);
+  }, [
+    cameraId,
+    rules,
+    calibration.homography_matrix,
+    calibration.table_dimensions_m,
+    onNewIncident,
+    onSoundAlert,
+    isBackendConnected,
+    forcedInfractions,
+    alertsPaused,
+  ]);
 
   return {
     detections,
+    scenePreset,
     telemetry,
     activeViolations,
     useLocalWebcam,
@@ -463,6 +549,6 @@ export function useWebSocketLiveFeed({
     stopWebcam,
     isBackendConnected,
     forcedInfractions,
-    toggleForcedInfraction
+    toggleForcedInfraction,
   };
 }
